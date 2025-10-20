@@ -1,41 +1,12 @@
-## Turnstile 保护短信验证码
-
-后端支持 Cloudflare Turnstile 服务端校验。配置 `config.toml` 或环境变量：
-
-- TURNSTILE_SECRET_KEY
-- TURNSTILE_EXPECTED_HOSTNAME (可选)
-- TURNSTILE_EXPECTED_ACTION (可选)
-
-启用后，调用 `/api/v1/auth/send-code` 时需提供 `cf_turnstile_token` 字段（来自前端 Turnstile 小组件 `cf-turnstile-response`）。
-
 # KKSS Backend
 
 基于Rust actix-web框架的冰淇凌推广网站后端系统，主要为消费者提供会员管理、优惠码兑换、充值等功能的API服务。
-
-## 技术栈
-
-- **Web框架**: actix-web 4.x
-- **数据库**: PostgreSQL
-- **ORM**: sqlx
-- **认证**: JWT
-- **外部服务**: Twilio (短信), Stripe (支付), 七云API
-
-## 功能特性
-
-- 🔐 用户认证 (注册/登录/JWT)
-- 📱 手机验证码 (Twilio)
-- 👥 会员体系 (粉丝/甜品股东/超级股东)
-- 🎫 优惠码管理
-- 💰 充值系统 (Stripe)
-- 🍦 甜品现金奖励
-- 📊 订单同步 (七云API)
-- 🔄 数据同步任务
 
 ## 快速开始
 
 ### 1. 环境准备
 
-确保已安装 Rust 1.70+:
+确保已安装 Rust 1.89+:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -45,30 +16,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ```bash
 # 克隆项目
-git clone <repository-url>
-cd kkss-backend
-
-# (可选) 复制配置文件
-cp config.toml.example config.toml
-
-# 编辑配置文件，填入实际的API密钥；或者直接通过环境变量配置，省略 config.toml
-vim config.toml
+git clone https://github.com/Kiddie-Kustoms-Sweets/kkss-backend-rs.git
+cd kkss-backend-rs
 ```
 
-### 3. 数据库初始化
-
-```bash
-# 安装 sqlx-cli
-cargo install sqlx-cli
-
-# 创建数据库
-sqlx database create
-
-# 运行迁移
-sqlx migrate run
-```
-
-### 4. 运行项目
+### 3. 运行项目
 
 ```bash
 # 开发模式
@@ -80,78 +32,6 @@ cargo watch -x run
 ```
 
 服务器将在 `http://localhost:8080` 启动。
-
-## API 文档
-
-### 认证模块
-
-#### POST `/api/v1/auth/send-code`
-发送手机验证码
-
-```json
-{
-  "phone": "+1234567890"
-}
-```
-
-#### POST `/api/v1/auth/register`
-用户注册
-
-```json
-{
-  "phone": "+1234567890",
-  "verification_code": "123456",
-  "username": "用户名",
-  "password": "Password123",
-  "birthday": "1990-01-01",
-  "referrer_code": "1000000001"
-}
-```
-
-#### POST `/api/v1/auth/login`
-用户登录
-
-```json
-{
-  "phone": "+1234567890",
-  "password": "Password123"
-}
-```
-
-### 用户模块
-
-#### GET `/api/v1/user/profile`
-获取用户信息 (需要认证)
-
-#### PUT `/api/v1/user/profile`
-更新用户信息 (需要认证)
-
-#### GET `/api/v1/user/referrals`
-获取推荐用户列表 (需要认证)
-
-### 订单模块
-
-#### GET `/api/v1/orders`
-获取用户订单列表 (需要认证)
-
-### 优惠码模块
-
-#### GET `/api/v1/discount-codes`
-获取用户优惠码列表 (需要认证)
-
-#### POST `/api/v1/discount-codes/redeem`
-兑换优惠码 (需要认证)
-
-### 充值模块
-
-#### POST `/api/v1/recharge/create-payment-intent`
-创建支付意图 (需要认证)
-
-#### POST `/api/v1/recharge/confirm`
-确认充值 (需要认证)
-
-#### GET `/api/v1/recharge/history`
-获取充值历史 (需要认证)
 
 ## 配置说明
 
@@ -244,64 +124,15 @@ cargo run
 - `recharge_records` - 充值记录表
 - `sweet_cash_transactions` - 甜品现金交易记录表
 
-说明：验证码发送/校验现已切换到 Twilio Verify，不再存储于本地数据库；原 `verification_codes` 表已在迁移中删除。
+## Turnstile 保护短信验证码
 
-## 使用 Podman 启动 PostgreSQL
+后端支持 Cloudflare Turnstile 服务端校验。配置 `config.toml` 或环境变量：
 
-```bash
-podman run -d \
-  --name kkss-postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=kkss \
-  -p 5432:5432 \
-  docker.io/library/postgres:16
+- TURNSTILE_SECRET_KEY
+- TURNSTILE_EXPECTED_HOSTNAME (可选)
+- TURNSTILE_EXPECTED_ACTION (可选)
 
-export DATABASE_URL="postgres://postgres:postgres@localhost:5432/kkss"
-
-# 初始化数据库并运行迁移
-scripts/init_db.sh
-
-# 运行服务
-cargo run
-```
-
-停止与移除容器：
-
-```bash
-podman stop kkss-postgres && podman rm kkss-postgres
-```
-
-详细的数据库结构请参考 `migrations/` 目录下的迁移文件。
-
-## 部署
-
-### Docker 部署
-
-```dockerfile
-FROM rust:1.70 as builder
-
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY --from=builder /app/target/release/kkss-backend .
-COPY config.toml .
-
-EXPOSE 8080
-CMD ["./kkss-backend"]
-```
-
-### 生产环境
-
-1. 使用PostgreSQL替代SQLite
-2. 设置合适的环境变量
-3. 配置反向代理 (nginx)
-4. 设置SSL证书
-5. 配置日志轮转
-6. 设置监控和报警
+启用后，调用 `/api/v1/auth/send-code` 时需提供 `cf_turnstile_token` 字段（来自前端 Turnstile 小组件 `cf-turnstile-response`）。
 
 ## 开发
 
@@ -328,21 +159,3 @@ src/
 2. 在 `services/` 中实现业务逻辑
 3. 在 `handlers/` 中添加HTTP处理器
 4. 在 `main.rs` 中注册路由
-
-### 测试
-
-```bash
-# 运行测试
-cargo test
-
-# 运行特定测试
-cargo test test_name
-
-# 生成测试覆盖率报告
-cargo install cargo-tarpaulin
-cargo tarpaulin --out Html
-```
-
-## 许可证
-
-[MIT License](LICENSE)
