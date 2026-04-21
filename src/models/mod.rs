@@ -1,5 +1,6 @@
 pub mod common;
 pub mod discount_code;
+pub mod email;
 pub mod lucky_draw;
 pub mod membership_purchase;
 pub mod monthly_card;
@@ -12,6 +13,7 @@ pub mod wallet;
 
 pub use common::*;
 pub use discount_code::*;
+pub use email::*;
 pub use lucky_draw::*;
 pub use membership_purchase::*;
 pub use monthly_card::*;

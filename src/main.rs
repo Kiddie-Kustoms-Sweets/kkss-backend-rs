@@ -9,7 +9,7 @@ use kkss_backend::tasks;
 use kkss_backend::{
     config::Config,
     database::{create_pool, run_migrations},
-    external::{SevenCloudAPI, StripeService, TwilioService},
+    external::{EmailService, SevenCloudAPI, StripeService, TwilioService},
     handlers,
     middlewares::{AuthMiddleware, create_cors},
     services::*,
@@ -61,6 +61,7 @@ async fn main() -> std::io::Result<()> {
     let twilio_service = TwilioService::new(config.twilio.clone());
     let turnstile_service = kkss_backend::external::TurnstileService::new(config.turnstile.clone());
     let stripe_service = StripeService::new(config.stripe.clone());
+    let email_service = EmailService::new(config.smtp.clone());
 
     let mut sevencloud_api = SevenCloudAPI::new(config.sevencloud.clone());
     if let Err(e) = sevencloud_api.login().await {
@@ -127,6 +128,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(stripe_service.clone()))
             .app_data(web::Data::new(sync_service.clone()))
             .app_data(web::Data::new(lucky_draw_service.clone()))
+            .app_data(web::Data::new(email_service.clone()))
             .configure(swagger_config)
             .configure(handlers::webhook_config)
             .service(
@@ -138,6 +140,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(handlers::recharge_config)
                     .configure(handlers::membership_config)
                     .configure(handlers::lucky_draw_config)
+                    .configure(handlers::email_config)
                     .configure(|cfg| {
                         handlers::recharge::monthly_card_config(cfg);
                     })

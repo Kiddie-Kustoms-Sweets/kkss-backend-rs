@@ -53,6 +53,8 @@ impl Modify for SecurityAddon {
         handlers::lucky_draw::get_prizes,
         handlers::lucky_draw::get_records,
         handlers::lucky_draw::spin,
+        handlers::email::send_contact_email,
+        handlers::email::subscribe,
     ),
     components(
         schemas(
@@ -107,6 +109,8 @@ impl Modify for SecurityAddon {
             LuckyDrawRecordResponse,
             LuckyDrawRecordQuery,
             LuckyDrawSpinResponse,
+            SendContactEmailRequest,
+            SubscribeRequest,
         )
     ),
     modifiers(&SecurityAddon),
@@ -120,6 +124,7 @@ impl Modify for SecurityAddon {
     (name = "monthly_card", description = "Monthly card API"),
     (name = "payments", description = "Unified payments API"),
     (name = "lucky_draw", description = "Lucky draw wheel API"),
+    (name = "email", description = "Email API"),
     ),
     info(
         title = "KKSS Backend API",

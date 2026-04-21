@@ -11,6 +11,8 @@ pub struct Config {
     pub sevencloud: SevenCloudConfig,
     #[serde(default)]
     pub turnstile: TurnstileConfig,
+    #[serde(default)]
+    pub smtp: SmtpConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +74,16 @@ pub struct TurnstileConfig {
     pub expected_hostname: Option<String>,
     #[serde(default)]
     pub expected_action: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SmtpConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub from_email: String,
+    pub to_email: String,
 }
 
 impl Config {
@@ -151,6 +163,16 @@ impl Config {
                         secret_key: get_env("TURNSTILE_SECRET_KEY").unwrap_or_default(),
                         expected_hostname: get_env("TURNSTILE_EXPECTED_HOSTNAME"),
                         expected_action: get_env("TURNSTILE_EXPECTED_ACTION"),
+                    },
+                    smtp: SmtpConfig {
+                        host: get_env("SMTP_HOST").unwrap_or_else(|| "smtp.gmail.com".to_string()),
+                        port: get_env_parse("SMTP_PORT", 587u16),
+                        username: get_env("SMTP_USERNAME").unwrap_or_default(),
+                        password: get_env("SMTP_PASSWORD").unwrap_or_default(),
+                        from_email: get_env("SMTP_FROM_EMAIL")
+                            .unwrap_or_else(|| "info@kiddiekustomssweets.com".to_string()),
+                        to_email: get_env("SMTP_TO_EMAIL")
+                            .unwrap_or_else(|| "info@kiddiekustomssweets.com".to_string()),
                     },
                 }
             }
@@ -241,6 +263,28 @@ impl Config {
         }
         if let Ok(v) = env::var("TURNSTILE_EXPECTED_ACTION") {
             config.turnstile.expected_action = Some(v);
+        }
+
+        // SMTP
+        if let Ok(v) = env::var("SMTP_HOST") {
+            config.smtp.host = v;
+        }
+        if let Ok(v) = env::var("SMTP_PORT")
+            && let Ok(p) = v.parse()
+        {
+            config.smtp.port = p;
+        }
+        if let Ok(v) = env::var("SMTP_USERNAME") {
+            config.smtp.username = v;
+        }
+        if let Ok(v) = env::var("SMTP_PASSWORD") {
+            config.smtp.password = v;
+        }
+        if let Ok(v) = env::var("SMTP_FROM_EMAIL") {
+            config.smtp.from_email = v;
+        }
+        if let Ok(v) = env::var("SMTP_TO_EMAIL") {
+            config.smtp.to_email = v;
         }
 
         Ok(config)

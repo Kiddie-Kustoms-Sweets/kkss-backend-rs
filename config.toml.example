@@ -46,3 +46,13 @@ secret_key = ""
 # Optional strict checks
 # expected_hostname = "api.example.com"
 # expected_action = "send_code"
+
+[smtp]
+# Google SMTP settings for sending emails via info@kiddiekustomssweets.com
+# Use an App Password if using Gmail: https://support.google.com/accounts/answer/185833
+host = "smtp.gmail.com"
+port = 587
+username = "your-google-account@gmail.com"
+password = "your-app-password"
+from_email = "info@kiddiekustomssweets.com"
+to_email = "info@kiddiekustomssweets.com"
