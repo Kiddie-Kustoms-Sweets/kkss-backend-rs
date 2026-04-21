@@ -1,7 +1,7 @@
 #### Multi-stage build for kkss-backend using cargo-chef (workspace: root + migration)
 
 # 0) Base chef image with cargo-chef available
-FROM rust:1.89 AS chef
+FROM rust:1.91 AS chef
 WORKDIR /build
 RUN cargo install cargo-chef
 
