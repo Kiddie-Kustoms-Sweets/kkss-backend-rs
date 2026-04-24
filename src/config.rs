@@ -12,7 +12,7 @@ pub struct Config {
     #[serde(default)]
     pub turnstile: TurnstileConfig,
     #[serde(default)]
-    pub smtp: SmtpConfig,
+    pub email: EmailConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,14 +76,17 @@ pub struct TurnstileConfig {
     pub expected_action: Option<String>,
 }
 
+fn default_from_email() -> String { "info@kiddiekustomssweets.com".to_string() }
+fn default_to_email() -> String { "info@kiddiekustomssweets.com".to_string() }
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SmtpConfig {
-    pub host: String,
-    pub port: u16,
-    pub username: String,
-    pub password: String,
+pub struct EmailConfig {
+    #[serde(default = "default_from_email")]
     pub from_email: String,
+    #[serde(default = "default_to_email")]
     pub to_email: String,
+    #[serde(default)]
+    pub resend_api_key: String,
 }
 
 impl Config {
@@ -164,15 +167,12 @@ impl Config {
                         expected_hostname: get_env("TURNSTILE_EXPECTED_HOSTNAME"),
                         expected_action: get_env("TURNSTILE_EXPECTED_ACTION"),
                     },
-                    smtp: SmtpConfig {
-                        host: get_env("SMTP_HOST").unwrap_or_else(|| "smtp.gmail.com".to_string()),
-                        port: get_env_parse("SMTP_PORT", 587u16),
-                        username: get_env("SMTP_USERNAME").unwrap_or_default(),
-                        password: get_env("SMTP_PASSWORD").unwrap_or_default(),
+                    email: EmailConfig {
                         from_email: get_env("SMTP_FROM_EMAIL")
                             .unwrap_or_else(|| "info@kiddiekustomssweets.com".to_string()),
                         to_email: get_env("SMTP_TO_EMAIL")
                             .unwrap_or_else(|| "info@kiddiekustomssweets.com".to_string()),
+                        resend_api_key: get_env("RESEND_API_KEY").unwrap_or_default(),
                     },
                 }
             }
@@ -265,26 +265,15 @@ impl Config {
             config.turnstile.expected_action = Some(v);
         }
 
-        // SMTP
-        if let Ok(v) = env::var("SMTP_HOST") {
-            config.smtp.host = v;
-        }
-        if let Ok(v) = env::var("SMTP_PORT")
-            && let Ok(p) = v.parse()
-        {
-            config.smtp.port = p;
-        }
-        if let Ok(v) = env::var("SMTP_USERNAME") {
-            config.smtp.username = v;
-        }
-        if let Ok(v) = env::var("SMTP_PASSWORD") {
-            config.smtp.password = v;
-        }
+        // Email
         if let Ok(v) = env::var("SMTP_FROM_EMAIL") {
-            config.smtp.from_email = v;
+            config.email.from_email = v;
         }
         if let Ok(v) = env::var("SMTP_TO_EMAIL") {
-            config.smtp.to_email = v;
+            config.email.to_email = v;
+        }
+        if let Ok(v) = env::var("RESEND_API_KEY") {
+            config.email.resend_api_key = v;
         }
 
         Ok(config)

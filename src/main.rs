@@ -61,7 +61,7 @@ async fn main() -> std::io::Result<()> {
     let twilio_service = TwilioService::new(config.twilio.clone());
     let turnstile_service = kkss_backend::external::TurnstileService::new(config.turnstile.clone());
     let stripe_service = StripeService::new(config.stripe.clone());
-    let email_service = EmailService::new(config.smtp.clone());
+    let email_service = EmailService::new(config.email.clone());
 
     let mut sevencloud_api = SevenCloudAPI::new(config.sevencloud.clone());
     if let Err(e) = sevencloud_api.login().await {
