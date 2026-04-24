@@ -1,18 +1,19 @@
 use crate::config::EmailConfig;
 use crate::error::{AppError, AppResult};
-use resend_rs::types::CreateEmailBaseOptions;
-use resend_rs::Resend;
+use serde_json::json;
 
 #[derive(Clone)]
 pub struct EmailService {
     config: EmailConfig,
-    client: Resend,
+    client: reqwest::Client,
 }
 
 impl EmailService {
     pub fn new(config: EmailConfig) -> Self {
-        let client = Resend::new(&config.resend_api_key);
-        Self { config, client }
+        Self {
+            config,
+            client: reqwest::Client::new(),
+        }
     }
 
     pub async fn send_contact_email(
@@ -63,13 +64,33 @@ impl EmailService {
             ));
         }
 
-        let opts = CreateEmailBaseOptions::new(from, [to], subject).with_text(body);
+        let payload = json!({
+            "from": from,
+            "to": [to],
+            "subject": subject,
+            "text": body,
+        });
 
-        self.client
-            .emails
-            .send(opts)
+        let res = self
+            .client
+            .post("https://api.resend.com/emails")
+            .header("Authorization", format!("Bearer {}", self.config.resend_api_key))
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
             .await
-            .map_err(|e| AppError::ExternalApiError(format!("Resend error: {e}")))?;
+            .map_err(|e| AppError::ExternalApiError(format!("Resend request error: {e}")))?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let text = res
+                .text()
+                .await
+                .unwrap_or_else(|_| "unknown error".to_string());
+            return Err(AppError::ExternalApiError(format!(
+                "Resend API error {status}: {text}"
+            )));
+        }
 
         Ok(())
     }
