@@ -3,7 +3,7 @@ use crate::entities::{MonthlyCardStatus, monthly_card_entity as mc};
 use crate::error::{AppError, AppResult};
 use crate::external::StripeService;
 use crate::models::*;
-use crate::services::{DiscountCodeService, StripeTransactionService};
+use crate::services::{DiscountCodeService, DiscountValue, StripeTransactionService};
 use chrono::{Duration, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter,
@@ -199,7 +199,7 @@ impl MonthlyCardService {
             self.discount_code_service
                 .create_user_discount_code(
                     card.user_id,
-                    550,
+                    DiscountValue::FixedAmount(550),
                     crate::entities::CodeType::SweetsCreditsReward,
                     1,
                 )

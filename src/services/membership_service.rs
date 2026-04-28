@@ -1,15 +1,18 @@
 use crate::entities::StripeTransactionCategory;
 use crate::entities::{
-    CodeType, MemberType, MembershipPurchaseStatus, membership_purchase_entity as mp,
+    CodeType, MemberType, MembershipPurchaseStatus, discount_code_entity as discount_codes,
+    membership_purchase_entity as mp,
     user_entity as users,
 };
 use crate::error::{AppError, AppResult};
 use crate::external::StripeService;
 use crate::models::*;
-use crate::services::{DiscountCodeService, StripeTransactionService};
+use chrono::Utc;
+use crate::services::{DiscountCodeService, DiscountValue, StripeTransactionService};
+use crate::utils::is_in_promo_period;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter,
-    QueryOrder, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel, PaginatorTrait,
+    QueryFilter, QueryOrder, Set, TransactionTrait,
 };
 use stripe::PaymentIntentStatus;
 
@@ -251,12 +254,13 @@ impl MembershipService {
 
         // 异步后台发放福利（不阻塞 webhook 返回）
         let svc = self.discount_code_service.clone();
+        let pool = self.pool.clone();
         let mt_for_task = new_member_type.clone();
         tokio::spawn(async move {
             match mt_for_task {
                 MemberType::SweetShareholder => {
                     if let Err(e) = svc
-                        .create_user_discount_code(user_id, 800, CodeType::ShareholderReward, 1)
+                        .create_user_discount_code(user_id, DiscountValue::FixedAmount(800), CodeType::ShareholderReward, 1)
                         .await
                     {
                         log::error!(
@@ -272,7 +276,7 @@ impl MembershipService {
                             svc_in
                                 .create_user_discount_code(
                                     user_id,
-                                    300,
+                                    DiscountValue::FixedAmount(300),
                                     CodeType::SuperShareholderReward,
                                     1,
                                 )
@@ -296,6 +300,32 @@ impl MembershipService {
                     }
                 }
                 MemberType::Fan => {}
+            }
+
+            // 活动期（5/4-5/11）额外发放七五折优惠券
+            if is_in_promo_period(Utc::now()) {
+                let already_has = discount_codes::Entity::find()
+                    .filter(discount_codes::Column::UserId.eq(user_id))
+                    .filter(discount_codes::Column::CodeType.eq(CodeType::RegistrationReward))
+                    .count(&pool)
+                    .await
+                    .unwrap_or(1)
+                    > 0;
+
+                if !already_has
+                    && let Err(e) = svc
+                        .create_user_discount_code(
+                            user_id,
+                            DiscountValue::Percentage(75),
+                            CodeType::RegistrationReward,
+                            1,
+                        )
+                        .await
+                {
+                    log::error!(
+                        "Failed to grant promo BOGO50 code for member user {user_id}: {e:?}"
+                    );
+                }
             }
         });
 

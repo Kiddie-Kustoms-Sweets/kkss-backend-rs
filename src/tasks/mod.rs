@@ -4,7 +4,7 @@
 //! membership expiration checks, birthday rewards, and monthly card coupons).
 //! Call `spawn_all` once during startup to launch them.
 
-use crate::services::{BirthdayRewardService, MembershipService, MonthlyCardService, SyncService};
+use crate::services::{BirthdayRewardService, DiscountCodeService, MembershipService, MonthlyCardService, SyncService};
 
 /// Spawn all background tasks.
 ///
@@ -16,6 +16,7 @@ pub fn spawn_all(
     membership_service: MembershipService,
     birthday_reward_service: BirthdayRewardService,
     monthly_card_service: MonthlyCardService,
+    discount_code_service: DiscountCodeService,
 ) {
     // 每分钟同步最近一月订单与优惠码
     {
@@ -81,6 +82,21 @@ pub fn spawn_all(
                     Err(e) => log::error!("Failed to grant monthly card daily coupons: {e:?}"),
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(24 * 3600)).await;
+            }
+        });
+    }
+
+    // 清理过期的注册活动百分比优惠券（每 6 小时）
+    {
+        let svc = discount_code_service.clone();
+        tokio::spawn(async move {
+            loop {
+                match svc.cleanup_expired_registration_rewards().await {
+                    Ok(n) if n > 0 => log::info!("Cleaned up expired registration rewards: {n}"),
+                    Ok(_) => {}
+                    Err(e) => log::error!("Failed to cleanup expired registration rewards: {e:?}"),
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
             }
         });
     }

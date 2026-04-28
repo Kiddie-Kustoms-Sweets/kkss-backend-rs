@@ -15,6 +15,7 @@ impl StripeTransactionService {
     }
 
     /// 记录一条与 PaymentIntent 相关的交易
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_payment_intent(
         &self,
         user_id: i64,
@@ -41,6 +42,7 @@ impl StripeTransactionService {
     }
 
     /// 记录退款
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_refund(
         &self,
         user_id: i64,

@@ -1,5 +1,5 @@
 use crate::entities::{
-    CodeType, discount_code_entity as discount_codes, sweet_cash_transaction_entity as sct,
+    CodeType, DiscountType, discount_code_entity as discount_codes, sweet_cash_transaction_entity as sct,
     user_entity as users,
 };
 use crate::error::{AppError, AppResult};
@@ -16,6 +16,14 @@ use sea_orm::{
 pub struct DiscountCodeService {
     pool: DatabaseConnection,
     sevencloud_api: std::sync::Arc<tokio::sync::Mutex<SevenCloudAPI>>,
+}
+
+/// 折扣值枚举，用于创建优惠券时区分固定金额和百分比折扣
+/// - FixedAmount: 金额（单位：美分）
+/// - Percentage: 折数的10倍（75 = 7.5折）
+pub enum DiscountValue {
+    FixedAmount(i64),
+    Percentage(i64),
 }
 
 impl DiscountCodeService {
@@ -119,10 +127,10 @@ impl DiscountCodeService {
         let expires_at = Utc::now() + Duration::days(30 * request.expire_months as i64);
         let discount_dollars = request.discount_amount as f64 / 100.0;
 
-        // 调用七云API生成优惠码
+        // 调用七云API生成优惠码 (type=1 固定金额)
         {
             let mut api = self.sevencloud_api.lock().await;
-            api.generate_discount_code(&code, discount_dollars, request.expire_months)
+            api.generate_discount_code(&code, discount_dollars, 1, request.expire_months)
                 .await?;
         }
 
@@ -132,6 +140,7 @@ impl DiscountCodeService {
             user_id: Set(user_id),
             code: Set(code.clone()),
             discount_amount: Set(request.discount_amount),
+            discount_type: Set(DiscountType::FixedAmount),
             code_type: Set(code_type_enum),
             is_used: Set(Some(false)),
             expires_at: Set(expires_at),
@@ -148,6 +157,7 @@ impl DiscountCodeService {
             id: discount_code_id,
             code,
             discount_amount: request.discount_amount,
+            discount_type: DiscountType::FixedAmount,
             code_type: CodeType::SweetsCreditsReward,
             is_used: false,
             expires_at,
@@ -209,7 +219,7 @@ impl DiscountCodeService {
         let discount_dollars = request.discount_amount as f64 / 100.0;
         {
             let mut api = self.sevencloud_api.lock().await;
-            api.generate_discount_code(&code, discount_dollars, request.expire_months)
+            api.generate_discount_code(&code, discount_dollars, 1, request.expire_months)
                 .await?;
         }
 
@@ -218,6 +228,7 @@ impl DiscountCodeService {
             user_id: Set(user_id),
             code: Set(code.clone()),
             discount_amount: Set(request.discount_amount),
+            discount_type: Set(DiscountType::FixedAmount),
             code_type: Set(code_type_enum),
             is_used: Set(Some(false)),
             expires_at: Set(expires_at),
@@ -230,7 +241,7 @@ impl DiscountCodeService {
         // 记录 sweet_cash_transactions (Redeem)
         sct::ActiveModel {
             user_id: Set(user_id),
-            transaction_type: Set(crate::entities::TransactionType::Redeem),
+            transaction_type: Set(sct::TransactionType::Redeem),
             amount: Set(request.discount_amount),
             balance_after: Set(current_balance - request.discount_amount),
             related_order_id: Set(None),
@@ -247,6 +258,7 @@ impl DiscountCodeService {
             id: discount_code_id,
             code,
             discount_amount: request.discount_amount,
+            discount_type: DiscountType::FixedAmount,
             code_type: CodeType::SweetsCreditsReward,
             is_used: false,
             expires_at,
@@ -260,26 +272,58 @@ impl DiscountCodeService {
         })
     }
 
-    /// 通用创建用户优惠码（注册奖励、推荐奖励等）
+    /// 通用创建用户优惠码（注册奖励、推荐奖励、会员福利等）
     ///
     /// # 参数
     ///
     /// * `user_id`: 用户id
-    /// * `amount`: 美分
+    /// * `value`: 折扣值（固定金额/百分比）
     /// * `code_type`: 优惠码类型
     /// * `expire_months`: 优惠码有效时间（1-3月）
     pub async fn create_user_discount_code(
         &self,
         user_id: i64,
-        amount: i64,
+        value: DiscountValue,
         code_type: CodeType,
         expire_months: u32,
     ) -> AppResult<i64> {
-        if amount <= 0 {
-            return Err(AppError::ValidationError(
-                "Discount amount must be positive".into(),
-            ));
+        // 对 RegistrationReward 类型做幂等检查：每个用户只能有一张
+        if code_type == CodeType::RegistrationReward {
+            let txn = self.pool.begin().await?;
+            let already_has = discount_codes::Entity::find()
+                .filter(discount_codes::Column::UserId.eq(user_id))
+                .filter(discount_codes::Column::CodeType.eq(CodeType::RegistrationReward))
+                .lock_exclusive()
+                .count(&txn)
+                .await? > 0;
+            if already_has {
+                txn.commit().await?;
+                return Err(AppError::ValidationError(
+                    "User already has a registration reward coupon".into(),
+                ));
+            }
+            txn.commit().await?;
         }
+
+        let (amount, discount_type, sevencloud_discount, sevencloud_type) = match value {
+            DiscountValue::FixedAmount(cents) => {
+                if cents <= 0 {
+                    return Err(AppError::ValidationError(
+                        "Discount amount must be positive".into(),
+                    ));
+                }
+                (cents, DiscountType::FixedAmount, cents as f64 / 100.0, 1u32)
+            }
+            DiscountValue::Percentage(tenths) => {
+                if tenths <= 0 || tenths > 100 {
+                    return Err(AppError::ValidationError(
+                        "Percentage discount must be between 1 and 100 (tenths)".into(),
+                    ));
+                }
+                (tenths, DiscountType::Percentage, tenths as f64 / 10.0, 0u32)
+            }
+        };
+
         if expire_months == 0 || expire_months > 3 {
             return Err(AppError::ValidationError(
                 "Expiration period must be between 1-3 months".into(),
@@ -309,10 +353,9 @@ impl DiscountCodeService {
             }
         };
 
-        let discount_dollars = amount as f64 / 100.0;
         {
             let mut api = self.sevencloud_api.lock().await;
-            api.generate_discount_code(&code, discount_dollars, expire_months)
+            api.generate_discount_code(&code, sevencloud_discount, sevencloud_type, expire_months)
                 .await?;
         }
 
@@ -321,6 +364,7 @@ impl DiscountCodeService {
             user_id: Set(user_id),
             code: Set(code),
             discount_amount: Set(amount),
+            discount_type: Set(discount_type),
             code_type: Set(code_type),
             is_used: Set(Some(false)),
             expires_at: Set(expires_at),
@@ -331,5 +375,78 @@ impl DiscountCodeService {
         let id = created.id;
 
         Ok(id)
+    }
+
+    /// 清理已过期的注册活动百分比优惠券
+    /// 从 SevenCloud 删除并清理本地数据库记录
+    pub async fn cleanup_expired_registration_rewards(&self) -> AppResult<usize> {
+        let now = Utc::now();
+
+        // 查询所有已过期的 RegistrationReward 优惠券（包括 external_id 为空的）
+        let expired_codes = discount_codes::Entity::find()
+            .filter(discount_codes::Column::CodeType.eq(CodeType::RegistrationReward))
+            .filter(discount_codes::Column::ExpiresAt.lte(now))
+            .all(&self.pool)
+            .await?;
+
+        if expired_codes.is_empty() {
+            return Ok(0);
+        }
+
+        // 分离有 external_id 和没有 external_id 的
+        let (with_external_id, without_external_id): (Vec<_>, Vec<_>) = expired_codes
+            .into_iter()
+            .partition(|c| c.external_id.is_some());
+
+        let mut deleted_count = 0usize;
+
+        // 对于有 external_id 的，先调用 SevenCloud 删除
+        let ids_to_delete: Vec<i64> = with_external_id
+            .iter()
+            .filter_map(|c| c.external_id)
+            .collect();
+
+        if !ids_to_delete.is_empty() {
+            let delete_result = {
+                let mut api = self.sevencloud_api.lock().await;
+                api.delete_discount_codes(ids_to_delete.clone()).await
+            };
+            match delete_result {
+                Ok(_) => {
+                    log::info!("Deleted {} expired registration rewards from SevenCloud", ids_to_delete.len());
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to delete expired registration rewards from SevenCloud: {e:?}. Will retry on next cleanup cycle."
+                    );
+                    // SevenCloud 删除失败时，只删除没有 external_id 的本地记录
+                    // 有 external_id 的留到下次重试
+                    for code in without_external_id {
+                        let id = code.id;
+                        let am = code.into_active_model();
+                        if let Err(e) = am.delete(&self.pool).await {
+                            log::error!("Failed to delete local discount code {id}: {e:?}");
+                        } else {
+                            deleted_count += 1;
+                        }
+                    }
+                    return Ok(deleted_count);
+                }
+            }
+        }
+
+        // 从本地数据库删除所有过期记录（包括有和没有 external_id 的）
+        for code in with_external_id.into_iter().chain(without_external_id) {
+            let id = code.id;
+            let am = code.into_active_model();
+            if let Err(e) = am.delete(&self.pool).await {
+                log::error!("Failed to delete local discount code {id}: {e:?}");
+            } else {
+                deleted_count += 1;
+            }
+        }
+
+        log::info!("Cleaned up {deleted_count} expired registration rewards");
+        Ok(deleted_count)
     }
 }

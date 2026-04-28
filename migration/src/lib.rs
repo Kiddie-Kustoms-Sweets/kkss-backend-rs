@@ -13,6 +13,7 @@ mod m20250816_000004_convert_sct_transaction_type;
 mod m20250821_000005_add_stripe_transactions;
 mod m20250821_000006_add_monthly_cards;
 mod m20250821_000007_add_lucky_draw;
+mod m20260428_000001_add_discount_type_and_registration_reward;
 
 pub struct Migrator;
 
@@ -33,6 +34,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250821_000005_add_stripe_transactions::Migration),
             Box::new(m20250821_000006_add_monthly_cards::Migration),
             Box::new(m20250821_000007_add_lucky_draw::Migration),
+            Box::new(m20260428_000001_add_discount_type_and_registration_reward::Migration),
         ]
     }
 }

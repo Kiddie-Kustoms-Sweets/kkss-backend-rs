@@ -25,7 +25,7 @@ pub use sweet_cash_transactions as sweet_cash_transaction_entity;
 pub use users as user_entity;
 
 // Re-export enums/types that are shared
-pub use discount_codes::CodeType;
+pub use discount_codes::{CodeType, DiscountType};
 pub use membership_purchases::MembershipPurchaseStatus;
 pub use monthly_cards::{MonthlyCardPlanType, MonthlyCardStatus};
 pub use recharge_records::RechargeStatus;

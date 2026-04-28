@@ -97,7 +97,7 @@ impl StripeService {
         let client_ref = user_id.to_string();
         create.client_reference_id = Some(&client_ref);
         create.payment_intent_data = Some(CreateCheckoutSessionPaymentIntentData {
-            description: description,
+            description,
             metadata: Some(meta),
             ..Default::default()
         });

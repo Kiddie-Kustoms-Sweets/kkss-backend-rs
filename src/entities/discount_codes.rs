@@ -7,6 +7,27 @@ use utoipa::ToSchema;
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, DeriveActiveEnum, EnumIter,
 )]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "discount_type")]
+#[serde(rename_all = "snake_case")]
+pub enum DiscountType {
+    #[sea_orm(string_value = "fixed_amount")]
+    FixedAmount,
+    #[sea_orm(string_value = "percentage")]
+    Percentage,
+}
+
+impl std::fmt::Display for DiscountType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DiscountType::FixedAmount => write!(f, "fixed_amount"),
+            DiscountType::Percentage => write!(f, "percentage"),
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, DeriveActiveEnum, EnumIter,
+)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "code_type")]
 #[serde(rename_all = "snake_case")]
 pub enum CodeType {
@@ -18,6 +39,8 @@ pub enum CodeType {
     SweetsCreditsReward,
     #[sea_orm(string_value = "free_topping")]
     FreeTopping,
+    #[sea_orm(string_value = "registration_reward")]
+    RegistrationReward,
 }
 
 impl std::fmt::Display for CodeType {
@@ -27,6 +50,7 @@ impl std::fmt::Display for CodeType {
             CodeType::SuperShareholderReward => write!(f, "super_shareholder_reward"),
             CodeType::SweetsCreditsReward => write!(f, "sweets_credits_reward"),
             CodeType::FreeTopping => write!(f, "free_topping"),
+            CodeType::RegistrationReward => write!(f, "registration_reward"),
         }
     }
 }
@@ -39,6 +63,7 @@ pub struct Model {
     pub user_id: i64,
     pub code: String,
     pub discount_amount: i64,
+    pub discount_type: DiscountType,
     pub code_type: CodeType,
     pub is_used: Option<bool>,
     pub used_at: Option<DateTime<Utc>>,

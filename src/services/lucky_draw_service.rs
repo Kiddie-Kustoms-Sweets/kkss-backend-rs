@@ -9,7 +9,7 @@ use crate::models::{
     LuckyDrawRecordQuery, LuckyDrawRecordResponse, LuckyDrawSpinResponse, LuckyDrawWonPrize,
     PaginatedResponse, PaginationParams,
 };
-use crate::services::DiscountCodeService;
+use crate::services::{DiscountCodeService, DiscountValue};
 use chrono::{Duration, Utc};
 use rand::Rng;
 use sea_orm::sea_query::Expr;
@@ -122,7 +122,7 @@ impl LuckyDrawService {
             .select_and_secure_prize(&txn, &prize_list)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Prize selection failed: {}", e.to_string()))
+                AppError::InternalError(format!("Prize selection failed: {}", e))
             })?;
 
         // 更新已用次数
@@ -319,7 +319,7 @@ impl LuckyDrawService {
                 self.discount_code_service
                     .create_user_discount_code(
                         user_id,
-                        50,
+                        DiscountValue::FixedAmount(50),
                         CodeType::FreeTopping,
                         1, // 有效期 1 个月
                     )
@@ -327,12 +327,12 @@ impl LuckyDrawService {
             }
             "Free Original Ice Cream Coupon" => {
                 self.discount_code_service
-                    .create_user_discount_code(user_id, 500, CodeType::SweetsCreditsReward, 1)
+                    .create_user_discount_code(user_id, DiscountValue::FixedAmount(500), CodeType::SweetsCreditsReward, 1)
                     .await?;
             }
             "Half Price Ice Cream Coupon" => {
                 self.discount_code_service
-                    .create_user_discount_code(user_id, 250, CodeType::SweetsCreditsReward, 1)
+                    .create_user_discount_code(user_id, DiscountValue::FixedAmount(250), CodeType::SweetsCreditsReward, 1)
                     .await?;
             }
             "Membership Monthly Card" => {

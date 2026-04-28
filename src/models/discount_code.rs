@@ -1,4 +1,4 @@
-use crate::entities::CodeType;
+use crate::entities::{CodeType, DiscountType};
 use crate::entities::discount_code_entity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,7 @@ pub struct DiscountCodeResponse {
     pub id: i64,
     pub code: String,
     pub discount_amount: i64,
+    pub discount_type: DiscountType,
     pub code_type: CodeType,
     pub is_used: bool,
     pub expires_at: DateTime<Utc>,
@@ -55,6 +56,7 @@ impl From<discount_code_entity::Model> for DiscountCodeResponse {
             id: m.id,
             code: m.code,
             discount_amount: m.discount_amount,
+            discount_type: m.discount_type,
             code_type: m.code_type,
             is_used: m.is_used.unwrap_or(false),
             expires_at: m.expires_at,

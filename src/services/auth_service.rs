@@ -3,8 +3,9 @@ use crate::entities::{CodeType, MemberType, lucky_draw_chance_entity as chances}
 use crate::error::{AppError, AppResult};
 use crate::external::*;
 use crate::models::*;
-use crate::services::DiscountCodeService;
+use crate::services::{DiscountCodeService, DiscountValue};
 use crate::utils::*;
+use crate::utils::is_in_promo_period;
 use chrono::{Datelike, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel,
@@ -162,52 +163,37 @@ impl AuthService {
         .await?;
         let user_id = new_user.id;
 
-        // 如果存在推荐人，双方都发放 $0.5 Free Topping 优惠码（有效期 1 个月）
-        if let Some(rid) = referrer_id {
+        // 处理推荐奖励和活动期优惠券
+        if is_in_promo_period(Utc::now()) {
+            // 活动期间（5/4-5/11）：不发 Free Topping，发七五折给所有新注册会员
             if let Err(e) = self
                 .discount_code_service
-                .create_user_discount_code(user_id, 50, CodeType::FreeTopping, 1)
+                .create_user_discount_code(user_id, DiscountValue::Percentage(75), CodeType::RegistrationReward, 1)
+                .await
+            {
+                log::error!("Failed to grant BOGO50 promo code to new user {user_id}: {e:?}");
+            }
+            // 活动期间推荐人仍然获得抽奖机会（只是不发 Free Topping）
+            if let Some(rid) = referrer_id {
+                Self::award_referral_lucky_draw_chance(&self.pool, rid).await;
+            }
+        } else if let Some(rid) = referrer_id {
+            // 非活动期间：正常发 Free Topping
+            if let Err(e) = self
+                .discount_code_service
+                .create_user_discount_code(user_id, DiscountValue::FixedAmount(50), CodeType::FreeTopping, 1)
                 .await
             {
                 log::error!("Failed to grant Free Topping coupon to new user {user_id}: {e:?}");
             }
             if let Err(e) = self
                 .discount_code_service
-                .create_user_discount_code(rid, 50, CodeType::FreeTopping, 1)
+                .create_user_discount_code(rid, DiscountValue::FixedAmount(50), CodeType::FreeTopping, 1)
                 .await
             {
                 log::error!("Failed to grant Free Topping coupon to referrer {rid}: {e:?}");
             }
-            // 推荐人获得一次抽奖机会（拉新任务）
-            match chances::Entity::find()
-                .filter(chances::Column::UserId.eq(rid))
-                .one(&self.pool)
-                .await
-            {
-                Ok(Some(ldc)) => {
-                    let current_total = ldc.total_awarded;
-                    let mut am = ldc.into_active_model();
-                    am.total_awarded = Set(current_total + 1);
-                    am.updated_at = Set(Some(Utc::now()));
-                    if let Err(e) = am.update(&self.pool).await {
-                        log::error!("Failed to award lucky draw chance to referrer {rid}: {e:?}");
-                    }
-                }
-                Ok(None) => {
-                    let am = chances::ActiveModel {
-                        user_id: Set(rid),
-                        total_awarded: Set(1),
-                        total_used: Set(0),
-                        ..Default::default()
-                    };
-                    if let Err(e) = am.insert(&self.pool).await {
-                        log::error!("Failed to init lucky draw chances for referrer {rid}: {e:?}");
-                    }
-                }
-                Err(e) => {
-                    log::error!("Failed to query lucky draw chances for referrer {rid}: {e:?}");
-                }
-            }
+            Self::award_referral_lucky_draw_chance(&self.pool, rid).await;
         }
 
         // 生成JWT令牌
@@ -364,6 +350,39 @@ impl AuthService {
     async fn get_user_with_referrals(&self, user_id: i64) -> AppResult<UserResponse> {
         let user = self.get_user_by_id(user_id).await?;
         self.build_user_response_with_referrals(user).await
+    }
+
+    /// 给推荐人增加一次抽奖机会
+    async fn award_referral_lucky_draw_chance(pool: &DatabaseConnection, rid: i64) {
+        match chances::Entity::find()
+            .filter(chances::Column::UserId.eq(rid))
+            .one(pool)
+            .await
+        {
+            Ok(Some(ldc)) => {
+                let current_total = ldc.total_awarded;
+                let mut am = ldc.into_active_model();
+                am.total_awarded = Set(current_total + 1);
+                am.updated_at = Set(Some(Utc::now()));
+                if let Err(e) = am.update(pool).await {
+                    log::error!("Failed to award lucky draw chance to referrer {rid}: {e:?}");
+                }
+            }
+            Ok(None) => {
+                let am = chances::ActiveModel {
+                    user_id: Set(rid),
+                    total_awarded: Set(1),
+                    total_used: Set(0),
+                    ..Default::default()
+                };
+                if let Err(e) = am.insert(pool).await {
+                    log::error!("Failed to init lucky draw chances for referrer {rid}: {e:?}");
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to query lucky draw chances for referrer {rid}: {e:?}");
+            }
+        }
     }
 
     /// 通过手机验证码重设密码

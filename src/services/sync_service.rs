@@ -319,9 +319,15 @@ impl SyncService {
                 .and_then(chrono::DateTime::from_timestamp_millis)
                 .unwrap_or_else(chrono::Utc::now);
 
+            // 保存 external_id 状态，避免 move 后无法访问
+            let has_external_id = local.external_id.is_some();
             let mut active = local.into_active_model();
             active.is_used = Set(Some(true));
             active.used_at = Set(Some(used_at));
+            // 同步 external_id（如果本地还没有）
+            if !has_external_id {
+                active.external_id = Set(Some(coupon_record.id));
+            }
             active.updated_at = Set(Some(Utc::now()));
             active.update(&self.pool).await?;
 
@@ -330,7 +336,22 @@ impl SyncService {
                 coupon_record.code,
                 local_id
             );
-        } else if !external_used && local_is_used {
+        } else {
+            // 外部未使用且本地也未使用：同步 external_id（如果本地还没有）
+            if local.external_id.is_none() {
+                let mut active = local.into_active_model();
+                active.external_id = Set(Some(coupon_record.id));
+                active.updated_at = Set(Some(Utc::now()));
+                active.update(&self.pool).await?;
+                log::info!(
+                    "Discount code external_id synced: code={}, external_id={}",
+                    coupon_record.code,
+                    coupon_record.id
+                );
+            }
+        }
+
+        if !external_used && local_is_used {
             // 外部显示未使用但本地已使用——通常不回滚，记录冲突
             log::warn!(
                 "Usage state mismatch (local used, external unused), keeping local: code={}, id={:?}",

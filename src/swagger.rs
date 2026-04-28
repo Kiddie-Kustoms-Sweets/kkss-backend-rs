@@ -7,7 +7,7 @@ use utoipa::{
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::entities::{
-    CodeType, MemberType, MonthlyCardPlanType, MonthlyCardStatus, RechargeStatus,
+    CodeType, DiscountType, MemberType, MonthlyCardPlanType, MonthlyCardStatus, RechargeStatus,
 };
 use crate::handlers;
 use crate::handlers::recharge::UnifiedConfirmRequest;
@@ -77,6 +77,7 @@ impl Modify for SecurityAddon {
             RedeemBalanceDiscountCodeRequest,
             RedeemBalanceDiscountCodeResponse,
             CodeType,
+            DiscountType,
             RechargeRecordResponse,
             CreatePaymentIntentRequest,
             CreatePaymentIntentResponse,

@@ -334,7 +334,8 @@ impl SevenCloudAPI {
     ///
     /// # 参数
     /// * `code` - 优惠码
-    /// * `discount` - 折扣金额，单位为美元
+    /// * `discount` - 折扣金额（固定金额时单位为美元，百分比时单位为折数，如 7.5）
+    /// * `discount_type` - 折扣类型：0=百分比，1=固定金额
     /// * `expire_months` - 过期月份
     ///
     /// # 返回值
@@ -343,6 +344,7 @@ impl SevenCloudAPI {
         &mut self,
         code: &str,
         discount: f64,
+        discount_type: u32,
         expire_months: u32,
     ) -> AppResult<bool> {
         if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
@@ -370,7 +372,7 @@ impl SevenCloudAPI {
         params.insert("codeNum", code.to_string());
         params.insert("number", "1".to_string());
         params.insert("month", expire_months.to_string());
-        params.insert("type", "1".to_string());
+        params.insert("type", discount_type.to_string());
         params.insert("discount", discount.to_string());
         params.insert("frpCode", "WEIXIN_NATIVE".to_string());
         params.insert("adminId", self.admin_id.unwrap().to_string());
@@ -404,8 +406,57 @@ impl SevenCloudAPI {
         };
 
         log::info!(
-            "Successfully generated discount code: {code}, Amount: {discount}, Expiration: {expire_months} months"
+            "Successfully generated discount code: {code}, discount_type: {discount_type}, discount: {discount}, Expiration: {expire_months} months"
         );
+
+        Ok(true)
+    }
+
+    /// 删除优惠码
+    ///
+    /// # 参数
+    /// * `ids` - 优惠码的 external_id 列表
+    ///
+    /// # 返回值
+    /// 返回一个布尔值，表示是否删除成功。
+    pub async fn delete_discount_codes(&mut self, ids: Vec<i64>) -> AppResult<bool> {
+        if ids.is_empty() {
+            return Ok(true);
+        }
+
+        let url = format!("{}/SZWL-SERVER/tPromoCode/deletes", self.config.base_url);
+
+        let body = serde_json::json!(ids);
+
+        let mut attempt = 0;
+        let _result = loop {
+            attempt += 1;
+            let response = self
+                .client
+                .post(&url)
+                .json(&body)
+                .header("Authorization", self.token.as_ref().unwrap())
+                .send()
+                .await?;
+            let result: ApiResponse<String> = response.json().await?;
+            if !result.success {
+                if attempt == 1 {
+                    log::warn!(
+                        "Sevencloud token maybe expired when deleting discount codes, relogin and retry...: {}",
+                        result.message
+                    );
+                    self.login().await?;
+                    continue;
+                }
+                return Err(AppError::ExternalApiError(format!(
+                    "Failed to delete discount codes: {}",
+                    result.message
+                )));
+            }
+            break result;
+        };
+
+        log::info!("Successfully deleted discount codes: {:?}", ids);
 
         Ok(true)
     }

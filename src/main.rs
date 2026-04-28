@@ -101,6 +101,7 @@ async fn main() -> std::io::Result<()> {
         membership_service.clone(),
         birthday_reward_service.clone(),
         monthly_card_service.clone(),
+        discount_code_service.clone(),
     );
 
     // 启动HTTP服务器
