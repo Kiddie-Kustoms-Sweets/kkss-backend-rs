@@ -86,15 +86,15 @@ pub fn spawn_all(
         });
     }
 
-    // 清理过期的注册活动百分比优惠券（每 6 小时）
+    // 清理所有过期优惠券（每 6 小时）
     {
         let svc = discount_code_service.clone();
         tokio::spawn(async move {
             loop {
-                match svc.cleanup_expired_registration_rewards().await {
-                    Ok(n) if n > 0 => log::info!("Cleaned up expired registration rewards: {n}"),
+                match svc.cleanup_expired_coupons().await {
+                    Ok(n) if n > 0 => log::info!("Cleaned up expired coupons: {n}"),
                     Ok(_) => {}
-                    Err(e) => log::error!("Failed to cleanup expired registration rewards: {e:?}"),
+                    Err(e) => log::error!("Failed to cleanup expired coupons: {e:?}"),
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
             }

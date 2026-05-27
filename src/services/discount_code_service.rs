@@ -377,14 +377,13 @@ impl DiscountCodeService {
         Ok(id)
     }
 
-    /// 清理已过期的注册活动百分比优惠券
+    /// 清理所有已过期的优惠券
     /// 从 SevenCloud 删除并清理本地数据库记录
-    pub async fn cleanup_expired_registration_rewards(&self) -> AppResult<usize> {
+    pub async fn cleanup_expired_coupons(&self) -> AppResult<usize> {
         let now = Utc::now();
 
-        // 查询所有已过期的 RegistrationReward 优惠券（包括 external_id 为空的）
+        // 查询所有已过期的优惠券（包括 external_id 为空的）
         let expired_codes = discount_codes::Entity::find()
-            .filter(discount_codes::Column::CodeType.eq(CodeType::RegistrationReward))
             .filter(discount_codes::Column::ExpiresAt.lte(now))
             .all(&self.pool)
             .await?;
@@ -413,11 +412,11 @@ impl DiscountCodeService {
             };
             match delete_result {
                 Ok(_) => {
-                    log::info!("Deleted {} expired registration rewards from SevenCloud", ids_to_delete.len());
+                    log::info!("Deleted {} expired coupons from SevenCloud", ids_to_delete.len());
                 }
                 Err(e) => {
                     log::error!(
-                        "Failed to delete expired registration rewards from SevenCloud: {e:?}. Will retry on next cleanup cycle."
+                        "Failed to delete expired coupons from SevenCloud: {e:?}. Will retry on next cleanup cycle."
                     );
                     // SevenCloud 删除失败时，只删除没有 external_id 的本地记录
                     // 有 external_id 的留到下次重试
@@ -446,7 +445,7 @@ impl DiscountCodeService {
             }
         }
 
-        log::info!("Cleaned up {deleted_count} expired registration rewards");
+        log::info!("Cleaned up {deleted_count} expired coupons");
         Ok(deleted_count)
     }
 }
