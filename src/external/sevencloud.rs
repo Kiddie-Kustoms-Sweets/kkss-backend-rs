@@ -57,6 +57,9 @@ pub struct ApiResponse<T> {
     pub code: String,
     pub message: String,
     pub data: Option<T>,
+    /// 七云的业务异常响应不携带 success 字段，缺省按 false 处理，
+    /// 以保证错误信息能正确透出而不是反序列化失败
+    #[serde(default)]
     pub success: bool,
 }
 
@@ -156,6 +159,17 @@ impl SevenCloudAPI {
         }
     }
 
+    /// 确保已登录并返回当前 token；未登录时先执行登录。
+    /// 后台任务中长期持有 token 可能失效，每次请求前调用以获取最新 token。
+    async fn ensure_token(&mut self) -> AppResult<String> {
+        if self.token.is_none() {
+            self.login().await?;
+        }
+        self.token.clone().ok_or_else(|| {
+            AppError::ExternalApiError("Sevencloud login did not return a token".to_string())
+        })
+    }
+
     pub async fn login(&mut self) -> AppResult<()> {
         let url = format!("{}/SZWL-SERVER/tAdmin/loginSys", self.config.base_url);
         let password_hash = format!("{:x}", md5::compute(&self.config.password));
@@ -186,7 +200,7 @@ impl SevenCloudAPI {
 
         log::info!(
             "Sevencloud API login successful, admin_id: {:?}",
-            self.admin_id.unwrap()
+            self.admin_id
         );
 
         Ok(())
@@ -201,10 +215,19 @@ impl SevenCloudAPI {
         let mut all_orders = Vec::new();
         let mut current_page = 1;
 
+        // 确保已登录，避免在未登录时 panic
+        self.ensure_token().await?;
+        let admin_id = self.admin_id.ok_or_else(|| {
+            AppError::ExternalApiError("Sevencloud login did not return an admin_id".to_string())
+        })?;
+        let username = self.username.clone().ok_or_else(|| {
+            AppError::ExternalApiError("Sevencloud login did not return a username".to_string())
+        })?;
+
         loop {
             let mut params = HashMap::new();
-            params.insert("adminId", self.admin_id.unwrap().to_string());
-            params.insert("userName", self.username.as_ref().unwrap().clone());
+            params.insert("adminId", admin_id.to_string());
+            params.insert("userName", username.clone());
             params.insert("adminType", "".to_string());
             params.insert("type", "".to_string());
             params.insert("payType", "".to_string());
@@ -225,11 +248,12 @@ impl SevenCloudAPI {
             let mut attempt = 0;
             let page_data = loop {
                 attempt += 1;
+                let token = self.ensure_token().await?;
                 let response = self
                     .client
                     .get(&url)
                     .query(&params)
-                    .header("Authorization", self.token.as_ref().unwrap())
+                    .header("Authorization", token)
                     .send()
                     .await?;
 
@@ -276,9 +300,15 @@ impl SevenCloudAPI {
         let mut all_coupons = Vec::new();
         let mut current_page = 1;
 
+        // 确保已登录，避免在未登录时 panic
+        self.ensure_token().await?;
+        let admin_id = self.admin_id.ok_or_else(|| {
+            AppError::ExternalApiError("Sevencloud login did not return an admin_id".to_string())
+        })?;
+
         loop {
             let mut data = serde_json::json!({
-                "adminId": self.admin_id.unwrap(),
+                "adminId": admin_id,
                 "current": current_page,
                 "size": 1000,
             });
@@ -291,11 +321,12 @@ impl SevenCloudAPI {
             let mut attempt = 0;
             let page_data = loop {
                 attempt += 1;
+                let token = self.ensure_token().await?;
                 let response = self
                     .client
                     .post(&url)
                     .json(&data)
-                    .header("Authorization", self.token.as_ref().unwrap())
+                    .header("Authorization", token)
                     .send()
                     .await?;
 
@@ -367,6 +398,12 @@ impl SevenCloudAPI {
 
         let url = format!("{}/SZWL-SERVER/tPromoCode/add", self.config.base_url);
 
+        // 确保已登录，避免在未登录时 panic
+        self.ensure_token().await?;
+        let admin_id = self.admin_id.ok_or_else(|| {
+            AppError::ExternalApiError("Sevencloud login did not return an admin_id".to_string())
+        })?;
+
         let mut params = HashMap::new();
         params.insert("addMode", "2".to_string());
         params.insert("codeNum", code.to_string());
@@ -375,16 +412,17 @@ impl SevenCloudAPI {
         params.insert("type", discount_type.to_string());
         params.insert("discount", discount.to_string());
         params.insert("frpCode", "WEIXIN_NATIVE".to_string());
-        params.insert("adminId", self.admin_id.unwrap().to_string());
+        params.insert("adminId", admin_id.to_string());
 
         let mut attempt = 0;
         let _result = loop {
             attempt += 1;
+            let token = self.ensure_token().await?;
             let response = self
                 .client
                 .get(&url)
                 .query(&params)
-                .header("Authorization", self.token.as_ref().unwrap())
+                .header("Authorization", token)
                 .send()
                 .await?;
             let result: ApiResponse<String> = response.json().await?;
@@ -431,11 +469,12 @@ impl SevenCloudAPI {
         let mut attempt = 0;
         let _result = loop {
             attempt += 1;
+            let token = self.ensure_token().await?;
             let response = self
                 .client
                 .post(&url)
                 .json(&body)
-                .header("Authorization", self.token.as_ref().unwrap())
+                .header("Authorization", token)
                 .send()
                 .await?;
             let result: ApiResponse<String> = response.json().await?;

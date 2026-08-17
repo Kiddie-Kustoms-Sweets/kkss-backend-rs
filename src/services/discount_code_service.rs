@@ -8,7 +8,7 @@ use crate::models::*;
 use crate::utils::generate_six_digit_code;
 use chrono::{Duration, Utc};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel,
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 
@@ -47,15 +47,25 @@ impl DiscountCodeService {
         let offset = params.get_offset();
         let limit = params.get_limit();
 
+        // 已过期且未使用的券对用户无意义，直接过滤（只返回「可用 + 已使用」，
+        // 与 UserStatistics 中 available_discount_codes 的口径一致）
+        let filter = Condition::all()
+            .add(discount_codes::Column::UserId.eq(user_id))
+            .add(
+                Condition::any()
+                    .add(discount_codes::Column::IsUsed.eq(true))
+                    .add(discount_codes::Column::ExpiresAt.gt(Utc::now())),
+            );
+
         // 获取总数
         let total = discount_codes::Entity::find()
-            .filter(discount_codes::Column::UserId.eq(user_id))
+            .filter(filter.clone())
             .count(&self.pool)
             .await? as i64;
 
         // 获取优惠码列表
         let models = discount_codes::Entity::find()
-            .filter(discount_codes::Column::UserId.eq(user_id))
+            .filter(filter)
             .order_by_desc(discount_codes::Column::CreatedAt)
             .limit(limit as u64)
             .offset(offset as u64)
@@ -397,45 +407,53 @@ impl DiscountCodeService {
             .into_iter()
             .partition(|c| c.external_id.is_some());
 
-        let mut deleted_count = 0usize;
+        // 分批调用 SevenCloud 删除：单批失败只影响该批，其余批次照常清理，
+        // 避免个别异常记录导致整批永远无法删除
+        const BATCH_SIZE: usize = 50;
+        let mut remotely_deleted: std::collections::HashSet<i64> =
+            std::collections::HashSet::new();
 
-        // 对于有 external_id 的，先调用 SevenCloud 删除
-        let ids_to_delete: Vec<i64> = with_external_id
-            .iter()
-            .filter_map(|c| c.external_id)
-            .collect();
+        if !with_external_id.is_empty() {
+            let ids_to_delete: Vec<i64> = with_external_id
+                .iter()
+                .filter_map(|c| c.external_id)
+                .collect();
 
-        if !ids_to_delete.is_empty() {
-            let delete_result = {
-                let mut api = self.sevencloud_api.lock().await;
-                api.delete_discount_codes(ids_to_delete.clone()).await
-            };
-            match delete_result {
-                Ok(_) => {
-                    log::info!("Deleted {} expired coupons from SevenCloud", ids_to_delete.len());
-                }
-                Err(e) => {
-                    log::error!(
-                        "Failed to delete expired coupons from SevenCloud: {e:?}. Will retry on next cleanup cycle."
-                    );
-                    // SevenCloud 删除失败时，只删除没有 external_id 的本地记录
-                    // 有 external_id 的留到下次重试
-                    for code in without_external_id {
-                        let id = code.id;
-                        let am = code.into_active_model();
-                        if let Err(e) = am.delete(&self.pool).await {
-                            log::error!("Failed to delete local discount code {id}: {e:?}");
-                        } else {
-                            deleted_count += 1;
-                        }
+            for chunk in ids_to_delete.chunks(BATCH_SIZE) {
+                let delete_result = {
+                    let mut api = self.sevencloud_api.lock().await;
+                    api.delete_discount_codes(chunk.to_vec()).await
+                };
+                match delete_result {
+                    Ok(_) => {
+                        log::info!(
+                            "Deleted {} expired coupons from SevenCloud",
+                            chunk.len()
+                        );
+                        remotely_deleted.extend(chunk.iter().copied());
                     }
-                    return Ok(deleted_count);
+                    Err(e) => {
+                        log::error!(
+                            "Failed to delete expired coupons from SevenCloud (ids={chunk:?}): {e:?}. Will retry on next cleanup cycle."
+                        );
+                    }
                 }
             }
         }
 
-        // 从本地数据库删除所有过期记录（包括有和没有 external_id 的）
-        for code in with_external_id.into_iter().chain(without_external_id) {
+        let mut deleted_count = 0usize;
+
+        // 本地删除：SevenCloud 删除成功的 + 没有 external_id 的；
+        // SevenCloud 删除失败的保留本地记录，留待下个清理周期重试
+        for code in with_external_id
+            .into_iter()
+            .filter(|c| {
+                c.external_id
+                    .map(|id| remotely_deleted.contains(&id))
+                    .unwrap_or(false)
+            })
+            .chain(without_external_id)
+        {
             let id = code.id;
             let am = code.into_active_model();
             if let Err(e) = am.delete(&self.pool).await {
