@@ -63,6 +63,24 @@ pub struct ApiResponse<T> {
     pub success: bool,
 }
 
+/// 读取七云响应并解析为 JSON。
+///
+/// 七云网关偶发返回非 JSON 内容（如 502/504 错误页、空响应体），
+/// 直接 `response.json()` 会产生无法定位的 `Decode` 错误（expected value, line 1 column 1）。
+/// 这里先读取文本再解析，失败时带出 HTTP 状态码与响应开头片段，便于诊断。
+async fn parse_json_response<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
+) -> AppResult<T> {
+    let status = response.status();
+    let body = response.text().await?;
+    serde_json::from_str(&body).map_err(|e| {
+        let snippet: String = body.chars().take(200).collect();
+        AppError::ExternalApiError(format!(
+            "Invalid JSON response from SevenCloud (HTTP {status}): {e}; body starts with: {snippet:?}"
+        ))
+    })
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrdersData {
     pub records: Vec<OrderRecord>,
@@ -181,7 +199,7 @@ impl SevenCloudAPI {
 
         let response = self.client.post(&url).json(&data).send().await?;
 
-        let result: ApiResponse<serde_json::Value> = response.json().await?;
+        let result: ApiResponse<serde_json::Value> = parse_json_response(response).await?;
 
         if !result.success {
             return Err(AppError::ExternalApiError(format!(
@@ -257,7 +275,20 @@ impl SevenCloudAPI {
                     .send()
                     .await?;
 
-                let result: ApiResponse<OrdersData> = response.json().await?;
+                // 网关偶发返回非 JSON 内容（如 502/504 错误页），等待后重试一次
+                let result: ApiResponse<OrdersData> = match parse_json_response(response).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if attempt == 1 {
+                            log::warn!(
+                                "Failed to parse Sevencloud orders response, retrying once...: {e:?}"
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                };
 
                 if !result.success {
                     if attempt == 1 {
@@ -330,7 +361,21 @@ impl SevenCloudAPI {
                     .send()
                     .await?;
 
-                let result: ApiResponse<CouponsData> = response.json().await?;
+                // 网关偶发返回非 JSON 内容（如 502/504 错误页），等待后重试一次
+                let result: ApiResponse<CouponsData> = match parse_json_response(response).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if attempt == 1 {
+                            log::warn!(
+                                "Failed to parse Sevencloud discount codes response, retrying once...: {e:?}"
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                };
+
                 if !result.success {
                     if attempt == 1 {
                         log::warn!(
@@ -425,7 +470,22 @@ impl SevenCloudAPI {
                 .header("Authorization", token)
                 .send()
                 .await?;
-            let result: ApiResponse<String> = response.json().await?;
+
+            // 网关偶发返回非 JSON 内容（如 502/504 错误页），等待后重试一次
+            let result: ApiResponse<String> = match parse_json_response(response).await {
+                Ok(r) => r,
+                Err(e) => {
+                    if attempt == 1 {
+                        log::warn!(
+                            "Failed to parse Sevencloud generate discount code response, retrying once...: {e:?}"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    return Err(e);
+                }
+            };
+
             if !result.success {
                 if attempt == 1 {
                     log::warn!(
@@ -477,7 +537,22 @@ impl SevenCloudAPI {
                 .header("Authorization", token)
                 .send()
                 .await?;
-            let result: ApiResponse<String> = response.json().await?;
+
+            // 网关偶发返回非 JSON 内容（如 502/504 错误页），等待后重试一次
+            let result: ApiResponse<String> = match parse_json_response(response).await {
+                Ok(r) => r,
+                Err(e) => {
+                    if attempt == 1 {
+                        log::warn!(
+                            "Failed to parse Sevencloud delete discount codes response, retrying once...: {e:?}"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    return Err(e);
+                }
+            };
+
             if !result.success {
                 if attempt == 1 {
                     log::warn!(
