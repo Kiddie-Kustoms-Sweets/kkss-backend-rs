@@ -2,14 +2,15 @@ use crate::entities::{CodeType, DiscountType};
 use crate::models::{UserResponse, UserStatistics};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminLoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminLoginResponse {
     pub access_token: String,
     pub token_type: String,
@@ -17,7 +18,7 @@ pub struct AdminLoginResponse {
 }
 
 /// 管理看板总览统计
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema)]
 pub struct AdminOverviewStats {
     pub total_users: i64,
     pub new_users_today: i64,
@@ -48,7 +49,7 @@ pub struct AdminOverviewStats {
 }
 
 /// 按 code_type 分组的优惠券统计
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminCouponStatItem {
     pub code_type: CodeType,
     /// 未使用且未过期
@@ -58,7 +59,7 @@ pub struct AdminCouponStatItem {
     pub expired_unused: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct AdminUserQuery {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
@@ -69,34 +70,34 @@ pub struct AdminUserQuery {
 }
 
 /// 仅分页参数（邀请列表等）
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct AdminPageQuery {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
 }
 
 /// 用户详情：资料 + 统计
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminUserDetailResponse {
     pub user: UserResponse,
     pub statistics: UserStatistics,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdjustBalanceRequest {
     /// 调整金额（美分），正数增加、负数扣减
     pub amount: i64,
     pub reason: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdjustStampsRequest {
     /// 调整印花数，正数增加、负数扣减
     pub delta: i64,
     pub reason: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminGrantCouponRequest {
     pub discount_type: DiscountType,
     /// fixed_amount: 金额（美分）；percentage: 折数的 10 倍（75 = 7.5 折）
@@ -106,7 +107,7 @@ pub struct AdminGrantCouponRequest {
     pub expire_months: u32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct AdminCouponQuery {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
@@ -118,7 +119,7 @@ pub struct AdminCouponQuery {
 }
 
 /// 管理端优惠券列表项（附带归属用户信息）
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminCouponResponse {
     pub id: i64,
     pub user_id: i64,
