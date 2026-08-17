@@ -40,6 +40,12 @@ username = "your-sevencloud-username"
 password = "your-sevencloud-password"
 base_url = "https://sz.sunzee.com.cn"
 
+[admin]
+# 管理后台账号，建议通过环境变量 ADMIN_USERNAME / ADMIN_PASSWORD 配置
+# 两者都为空时管理后台登录不可用
+username = ""
+password = ""
+
 [turnstile]
 # Cloudflare Turnstile secret key (server-side). If empty, Turnstile check is disabled.
 secret_key = ""

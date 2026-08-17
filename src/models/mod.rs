@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod common;
 pub mod discount_code;
 pub mod email;
@@ -11,6 +12,7 @@ pub mod sweet_cash_transaction;
 pub mod user;
 pub mod wallet;
 
+pub use admin::*;
 pub use common::*;
 pub use discount_code::*;
 pub use email::*;

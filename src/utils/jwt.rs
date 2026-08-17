@@ -89,6 +89,33 @@ impl JwtService {
         Ok(claims)
     }
 
+    /// 签发管理员 token（token_type = "admin"，有效期与 access token 一致）
+    pub fn generate_admin_token(&self, username: &str) -> AppResult<String> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(self.access_token_expires_in);
+
+        let claims = Claims {
+            sub: username.to_string(),
+            member_code: String::new(),
+            exp: exp.timestamp(),
+            iat: now.timestamp(),
+            token_type: "admin".to_string(),
+        };
+
+        encode(&Header::default(), &claims, &self.encoding_key).map_err(AppError::JwtError)
+    }
+
+    /// 校验管理员 token，拒绝普通用户 token
+    pub fn verify_admin_token(&self, token: &str) -> AppResult<Claims> {
+        let claims = self.verify_token(token)?;
+
+        if claims.token_type != "admin" {
+            return Err(AppError::AuthError("Invalid admin token type".to_string()));
+        }
+
+        Ok(claims)
+    }
+
     pub fn get_access_token_expires_in(&self) -> i64 {
         self.access_token_expires_in
     }

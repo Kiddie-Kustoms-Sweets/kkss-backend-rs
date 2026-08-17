@@ -13,6 +13,8 @@ pub struct Config {
     pub turnstile: TurnstileConfig,
     #[serde(default)]
     pub email: EmailConfig,
+    #[serde(default)]
+    pub admin: AdminConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +89,16 @@ pub struct EmailConfig {
     pub to_email: String,
     #[serde(default)]
     pub resend_api_key: String,
+}
+
+/// 管理后台账号（通过环境变量 ADMIN_USERNAME / ADMIN_PASSWORD 配置）
+/// 两者都为空时管理后台登录不可用
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdminConfig {
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
 }
 
 impl Config {
@@ -173,6 +185,10 @@ impl Config {
                         to_email: get_env("SMTP_TO_EMAIL")
                             .unwrap_or_else(|| "info@kiddiekustomssweets.com".to_string()),
                         resend_api_key: get_env("RESEND_API_KEY").unwrap_or_default(),
+                    },
+                    admin: AdminConfig {
+                        username: get_env("ADMIN_USERNAME").unwrap_or_default(),
+                        password: get_env("ADMIN_PASSWORD").unwrap_or_default(),
                     },
                 }
             }
@@ -274,6 +290,14 @@ impl Config {
         }
         if let Ok(v) = env::var("RESEND_API_KEY") {
             config.email.resend_api_key = v;
+        }
+
+        // Admin
+        if let Ok(v) = env::var("ADMIN_USERNAME") {
+            config.admin.username = v;
+        }
+        if let Ok(v) = env::var("ADMIN_PASSWORD") {
+            config.admin.password = v;
         }
 
         Ok(config)

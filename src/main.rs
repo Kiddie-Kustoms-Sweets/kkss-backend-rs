@@ -11,7 +11,7 @@ use kkss_backend::{
     database::{create_pool, run_migrations},
     external::{EmailService, SevenCloudAPI, StripeService, TwilioService},
     handlers,
-    middlewares::{AuthMiddleware, create_cors},
+    middlewares::{AdminMiddleware, AuthMiddleware, create_cors},
     services::*,
     swagger::swagger_config,
     utils::JwtService,
@@ -94,6 +94,14 @@ async fn main() -> std::io::Result<()> {
     let sync_service = SyncService::new(pool.clone(), sevencloud_api.clone());
     let birthday_reward_service = BirthdayRewardService::new(pool.clone());
     let lucky_draw_service = LuckyDrawService::new(pool.clone(), discount_code_service.clone());
+    let admin_service = AdminService::new(
+        pool.clone(),
+        jwt_service.clone(),
+        config.admin.clone(),
+        user_service.clone(),
+        discount_code_service.clone(),
+        sevencloud_api.clone(),
+    );
 
     // 启动后台定时任务
     tasks::spawn_all(
@@ -130,8 +138,14 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(sync_service.clone()))
             .app_data(web::Data::new(lucky_draw_service.clone()))
             .app_data(web::Data::new(email_service.clone()))
+            .app_data(web::Data::new(admin_service.clone()))
             .configure(swagger_config)
             .configure(handlers::webhook_config)
+            .service(
+                web::scope("/api/v1/admin")
+                    .wrap(AdminMiddleware::new(jwt_service.clone()))
+                    .configure(handlers::admin_config),
+            )
             .service(
                 web::scope("/api/v1")
                     .configure(handlers::auth_config)

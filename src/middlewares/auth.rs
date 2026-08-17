@@ -20,8 +20,8 @@ impl PublicPaths {
         Self {
             // 完全匹配的公开路径
             exact_paths: vec!["/swagger-ui", "/swagger-ui/", "/api-docs/openapi.json"],
-            // 前缀匹配的公开路径
-            prefix_paths: vec!["/swagger-ui/", "/api-docs/", "/api/v1/auth/", "/webhook/", "/api/v1/email/"],
+            // 前缀匹配的公开路径（/api/v1/admin/ 由 AdminMiddleware 单独鉴权）
+            prefix_paths: vec!["/swagger-ui/", "/api-docs/", "/api/v1/auth/", "/webhook/", "/api/v1/email/", "/api/v1/admin/"],
             // 需要排除的路径（即使在公开前缀下也需要认证）
             excluded_paths: vec!["/api/v1/auth/refresh"],
         }

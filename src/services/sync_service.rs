@@ -29,8 +29,11 @@ impl SyncService {
 
     /// 同步七云订单到本地
     pub async fn sync_orders(&self, start_date: &str, end_date: &str) -> AppResult<usize> {
-        let mut api = self.sevencloud_api.lock().await;
-        let orders = api.get_orders(start_date, end_date).await?;
+        // 仅在调用七云接口期间持有锁，处理数据时释放，避免阻塞其他七云调用
+        let orders = {
+            let mut api = self.sevencloud_api.lock().await;
+            api.get_orders(start_date, end_date).await?
+        };
 
         let mut processed_count = 0;
 
@@ -258,13 +261,25 @@ impl SyncService {
 
     /// 同步七云优惠码
     pub async fn sync_discount_codes(&self) -> AppResult<usize> {
-        let mut api = self.sevencloud_api.lock().await;
-        let coupons = api.get_discount_codes(None).await?;
+        // 仅在调用七云接口期间持有锁，处理数据时释放，避免阻塞其他七云调用
+        let coupons = {
+            let mut api = self.sevencloud_api.lock().await;
+            api.get_discount_codes(None).await?
+        };
+
+        // 一次性加载本地优惠码，避免每条外部记录一次数据库往返
+        let local_map: std::collections::HashMap<String, discount_codes::Model> =
+            discount_codes::Entity::find()
+                .all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|m| (m.code.clone(), m))
+                .collect();
 
         let mut processed_count = 0;
 
         for coupon_record in coupons {
-            if let Err(e) = self.process_discount_code(coupon_record).await {
+            if let Err(e) = self.process_discount_code(coupon_record, &local_map).await {
                 log::error!("Failed to process discount code: {e:?}");
                 continue;
             }
@@ -276,25 +291,24 @@ impl SyncService {
     }
 
     /// 处理七云优惠码
-    async fn process_discount_code(&self, coupon_record: CouponRecord) -> AppResult<()> {
+    async fn process_discount_code(
+        &self,
+        coupon_record: CouponRecord,
+        local_map: &std::collections::HashMap<String, discount_codes::Model>,
+    ) -> AppResult<()> {
         // 同步逻辑：依据外部优惠码 code 字段（不使用 external_id），更新本地 is_used/used_at
         // _coupon_record.is_use: "0" 未使用, "1" 已使用
         let code_str = coupon_record.code.to_string();
 
         // 查询本地是否存在该优惠码
-        let local = discount_codes::Entity::find()
-            .filter(discount_codes::Column::Code.eq(code_str.clone()))
-            .one(&self.pool)
-            .await?;
-
-        if local.is_none() {
+        let Some(local) = local_map.get(&code_str) else {
             log::debug!(
                 "Discount code not found locally, skipping sync: external_code={}",
                 coupon_record.code
             );
             return Ok(());
-        }
-        let local = local.unwrap();
+        };
+        let local = local.clone();
         let local_id: i64 = local.id;
         let local_is_used: bool = local.is_used.unwrap_or(false);
 

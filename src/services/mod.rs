@@ -1,3 +1,4 @@
+pub mod admin_service;
 pub mod auth_service;
 pub mod birthday_reward_service;
 pub mod discount_code_service;
@@ -10,6 +11,7 @@ pub mod stripe_transaction_service;
 pub mod sync_service;
 pub mod user_service;
 
+pub use admin_service::*;
 pub use auth_service::*;
 pub use birthday_reward_service::*;
 pub use discount_code_service::*;
