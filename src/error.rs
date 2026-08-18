@@ -27,6 +27,10 @@ pub enum AppError {
     #[error("External API error: {0}")]
     ExternalApiError(String),
 
+    /// 外部 API 的瞬时错误（如上游服务抖动），可退避重试
+    #[error("External API error (retryable): {0}")]
+    ExternalApiRetryable(String),
+
     #[error("Config error: {0}")]
     ConfigError(String),
 
@@ -41,6 +45,13 @@ pub enum AppError {
 
     #[error("JSON serialization/deserialization error: {0}")]
     SerdeJsonError(#[from] serde_json::Error),
+}
+
+impl AppError {
+    /// 是否为可重试的瞬时错误（如上游服务抖动）
+    pub fn is_retryable(&self) -> bool {
+        matches!(self, AppError::ExternalApiRetryable(_))
+    }
 }
 
 impl ResponseError for AppError {
@@ -77,6 +88,14 @@ impl ResponseError for AppError {
             }
             AppError::ExternalApiError(msg) => {
                 log::error!("External API error: {msg}");
+                (
+                    actix_web::http::StatusCode::BAD_GATEWAY,
+                    "EXTERNAL_API_ERROR",
+                    msg,
+                )
+            }
+            AppError::ExternalApiRetryable(msg) => {
+                log::error!("External API error (retries exhausted): {msg}");
                 (
                     actix_web::http::StatusCode::BAD_GATEWAY,
                     "EXTERNAL_API_ERROR",
