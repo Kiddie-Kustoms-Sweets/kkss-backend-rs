@@ -12,21 +12,21 @@ impl MigrationTrait for Migration {
             manager.get_database_backend(),
             "DO $$ BEGIN CREATE TYPE discount_type AS ENUM ('fixed_amount', 'percentage'); EXCEPTION WHEN duplicate_object THEN null; END $$;".to_string(),
         );
-        manager.get_connection().execute(create_enum).await?;
+        manager.get_connection().execute_raw(create_enum).await?;
 
         // Add discount_type column to discount_codes table
         let add_col = Statement::from_string(
             manager.get_database_backend(),
             "ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS discount_type discount_type NOT NULL DEFAULT 'fixed_amount'".to_string(),
         );
-        manager.get_connection().execute(add_col).await?;
+        manager.get_connection().execute_raw(add_col).await?;
 
         // Add registration_reward to code_type enum
         let add_enum = Statement::from_string(
             manager.get_database_backend(),
             "ALTER TYPE code_type ADD VALUE IF NOT EXISTS 'registration_reward'".to_string(),
         );
-        manager.get_connection().execute(add_enum).await?;
+        manager.get_connection().execute_raw(add_enum).await?;
 
         Ok(())
     }

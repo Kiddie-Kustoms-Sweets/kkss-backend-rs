@@ -12,7 +12,7 @@ impl MigrationTrait for Migration {
             manager.get_database_backend(),
             "ALTER TYPE code_type ADD VALUE IF NOT EXISTS 'free_topping'".to_string(),
         );
-        manager.get_connection().execute(stmt).await?;
+        manager.get_connection().execute_raw(stmt).await?;
         Ok(())
     }
 

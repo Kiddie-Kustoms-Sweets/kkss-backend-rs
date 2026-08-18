@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt;
 
 /// 生成6位数字代码（可用于验证码、优惠码等）
 pub fn generate_six_digit_code() -> String {

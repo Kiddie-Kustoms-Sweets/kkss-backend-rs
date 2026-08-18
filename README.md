@@ -6,7 +6,7 @@
 
 ### 1. 环境准备
 
-确保已安装 Rust 1.89+:
+确保已安装 Rust（项目通过 `rust-toolchain.toml` 固定 1.97.1，rustup 会自动安装对应工具链）:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

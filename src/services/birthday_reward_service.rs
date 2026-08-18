@@ -4,7 +4,7 @@ use crate::entities::{
 };
 use crate::error::AppResult;
 use chrono::{Datelike, Utc};
-use sea_orm::sea_query::{OnConflict, PostgresQueryBuilder, Query};
+use sea_orm::sea_query::{OnConflict, Query};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
     IntoActiveModel, QueryFilter, Set, TransactionTrait,
@@ -65,13 +65,8 @@ impl BirthdayRewardService {
                     .to_owned(),
             )
             .to_owned();
-        let (sql, values) = insert.build(PostgresQueryBuilder);
-        let stmt = sea_orm::Statement::from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            sql,
-            values,
-        );
-        let res = txn.execute(stmt).await?;
+        // SeaORM 2.0: `execute` 直接接收 SeaQuery 语句
+        let res = txn.execute(&insert).await?;
         if res.rows_affected() == 0 {
             // 已发放过，跳过
             txn.commit().await?;

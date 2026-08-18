@@ -32,7 +32,7 @@ impl MigrationTrait for Migration {
             manager.get_database_backend(),
             "CREATE INDEX IF NOT EXISTS idx_users_membership_expires_at ON users(membership_expires_at) WHERE membership_expires_at IS NOT NULL".to_owned(),
         );
-        manager.get_connection().execute(stmt).await?;
+        manager.get_connection().execute_raw(stmt).await?;
         Ok(())
     }
 

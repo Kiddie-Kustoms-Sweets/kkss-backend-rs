@@ -25,7 +25,7 @@ impl MigrationTrait for Migration {
         // 2) Convert the column to TEXT explicitly using USING, so we can rewrite values safely
         manager
             .get_connection()
-            .execute(Statement::from_string(
+            .execute_raw(Statement::from_string(
                 manager.get_database_backend(),
                 "ALTER TABLE \"discount_codes\" ALTER COLUMN \"code_type\" TYPE TEXT USING \"code_type\"::TEXT".to_string(),
             ))
@@ -43,12 +43,12 @@ impl MigrationTrait for Migration {
             END"#
                 .to_owned(),
         );
-        manager.get_connection().execute(stmt).await?;
+        manager.get_connection().execute_raw(stmt).await?;
 
         // 4) Convert the column to the new enum type explicitly with USING
         manager
             .get_connection()
-            .execute(Statement::from_string(
+            .execute_raw(Statement::from_string(
                 manager.get_database_backend(),
                 "ALTER TABLE \"discount_codes\" ALTER COLUMN \"code_type\" TYPE code_type_new USING \"code_type\"::code_type_new".to_string(),
             ))
@@ -62,7 +62,7 @@ impl MigrationTrait for Migration {
         // 6) Rename the new enum type to the original name for backward compatibility
         manager
             .get_connection()
-            .execute(Statement::from_string(
+            .execute_raw(Statement::from_string(
                 manager.get_database_backend(),
                 "ALTER TYPE code_type_new RENAME TO code_type".to_string(),
             ))

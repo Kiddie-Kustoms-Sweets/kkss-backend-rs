@@ -286,7 +286,7 @@ VALUES
  ('Thank You', 0, 3450, NULL, NULL, TRUE)                      -- 谢谢参与
 ON CONFLICT (name_en) DO NOTHING;
 "#;
-        conn.execute(Statement::from_string(
+        conn.execute_raw(Statement::from_string(
             manager.get_database_backend(),
             insert_sql.to_string(),
         ))

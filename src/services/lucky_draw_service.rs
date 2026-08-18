@@ -11,11 +11,11 @@ use crate::models::{
 };
 use crate::services::{DiscountCodeService, DiscountValue};
 use chrono::{Duration, Utc};
-use rand::Rng;
+use rand::RngExt;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, IntoActiveModel,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, ExprTrait,
+    IntoActiveModel, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 use sea_orm::{Condition, Order, UpdateResult};
 

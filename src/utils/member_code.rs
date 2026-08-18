@@ -1,6 +1,6 @@
 use crate::entities::user_entity;
 use crate::error::AppResult;
-use rand::Rng;
+use rand::RngExt;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 /// 生成唯一的六位数字推荐码
