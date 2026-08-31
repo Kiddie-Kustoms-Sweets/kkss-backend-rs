@@ -17,6 +17,7 @@ use sea_orm::{
     IntoActiveModel, Iterable, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set,
     TransactionTrait,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -290,7 +291,40 @@ impl AdminService {
             .offset(params.get_offset() as u64)
             .all(&self.pool)
             .await?;
-        let items: Vec<UserResponse> = models.into_iter().map(UserResponse::from).collect();
+
+        // 批量统计本页每个用户的推荐人数（单次分组查询，避免 N+1）；
+        // UserResponse::from 默认 total_referrals = 0，需要按用户回填真实数量
+        let user_ids: Vec<i64> = models.iter().map(|m| m.id).collect();
+        let referral_counts: HashMap<i64, i64> = if user_ids.is_empty() {
+            HashMap::new()
+        } else {
+            #[derive(Debug, sea_orm::FromQueryResult)]
+            struct ReferralCountRow {
+                referrer_id: i64,
+                count: i64,
+            }
+            users::Entity::find()
+                .select_only()
+                .column(users::Column::ReferrerId)
+                .column_as(Expr::val(1).count(), "count")
+                .filter(users::Column::ReferrerId.is_in(user_ids))
+                .group_by(users::Column::ReferrerId)
+                .into_model::<ReferralCountRow>()
+                .all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|r| (r.referrer_id, r.count))
+                .collect()
+        };
+
+        let items: Vec<UserResponse> = models
+            .into_iter()
+            .map(|m| {
+                let mut resp = UserResponse::from(m);
+                resp.total_referrals = referral_counts.get(&resp.id).copied().unwrap_or(0);
+                resp
+            })
+            .collect();
 
         Ok(PaginatedResponse::new(
             items,
